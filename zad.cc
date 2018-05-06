@@ -312,24 +312,28 @@ int main(int argc, char *argv[]) {
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier());
     FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats();
     //    int j = 0;
+    int lostPackets = 0;
+    int rxPackets = 0;
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin(); i != stats.end(); ++i) {
         double usefulData = ((double) (i->second.rxBytes) / (double) (i->second.txBytes))*100;
         //        double throughput = (double) i->second.rxBytes * 8.0 / (double) (i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()) / 1024; //kbps
         double packetLossRate = ((double) i->second.lostPackets / (double) (i->second.lostPackets + i->second.rxPackets))*100;
         //        double meanDelay = (i->second.delaySum.GetMilliSeconds() / (double) i->second.rxPackets);
+        lostPackets += i->second.lostPackets;
+        rxPackets += i->second.rxPackets;
 
-        std::cout << packetLossRate << "\t";
+        // std::cout << packetLossRate << "\t";
         //        std::cout << meanDelay << "\t";
 
         //        std::cout << throughput << "\t";
-        std::cout << usefulData << "\t";
+        // std::cout << usefulData << "\t";
 
         //        std::cout << i->second.lostPackets << "\t";
         //        std::cout << i->second.jitterSum << "\t";
         //        std::cout << i->second.rxBytes << "\t";
 
         //        std::cout << i->second.txBytes << "\t";
-        std::cout << "\n";
+        // std::cout << "\n";
 
 
         data2.Add(i->second.rxBytes, packetLossRate);
@@ -338,6 +342,10 @@ int main(int argc, char *argv[]) {
         data2.Add((double) i->second.jitterSum.GetSeconds(), (double) i->second.lostPackets);
 
     }
+
+    double avgLoss = ((double) lostPackets / (double) (lostPackets + rxPackets))*100;
+
+    std::cout << PACKET_SIZE << " - " << DISTANCE << " - " <<avgLoss;
 
     Simulator::Destroy();
 
