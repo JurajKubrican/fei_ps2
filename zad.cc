@@ -7,13 +7,9 @@
 #include "ns3/energy-module.h"
 #include "ns3/csma-module.h"
 #include "ns3/gnuplot.h"
-#include "ns3/flow-monitor-module.h"
+#include "ns3/flow-monitor.h"
 #include "ns3/flow-monitor-helper.h"
-
-
-#include <vector>
-#include <map>
-
+#include "ns3/flow-monitor-module.h"
 
 using namespace ns3;
 
@@ -22,11 +18,15 @@ NS_LOG_COMPONENT_DEFINE("WifiSimpleAdhocGrid");
 #define GRID_DISTANCE 400
 
 
-///// Trace function for remaining energy at node.
 
-void
-RemainingEnergy(uint32_t i, double oldValue, double remainingEnergy) {
-    std::cout << i << " - " << Simulator::Now().GetSeconds() << " = " << remainingEnergy << " J" << std::endl;
+
+/// Trace function for remaining energy at node.
+void RemainingEnergy (uint32_t i, Gnuplot2dDataset *data, double oldValue, double remainingEnergy)
+{
+    double tm = Simulator::Now ().GetSeconds ();
+  //std::cout << Simulator::Now ().GetSeconds () << "node: "<< i <<"s Current remaining energy = " << remainingEnergy << "J" << std::endl;
+    data->Add(tm, remainingEnergy);
+  //std::cout << Simulator::Now ().GetSeconds () << "s Current remaining energy = " << "J" << std::endl;
 }
 
 Vector randomManPosition(int x, int y, Vector m_position) {
@@ -62,13 +62,13 @@ Vector randomManPosition(int x, int y, Vector m_position) {
 void SensorRxCallback(Ptr<Socket> sendSocket, Ptr<Socket> socket) {
     NS_LOG_UNCOND("Sensor received -> Sending");
     while (socket->Recv()) {
-        sendSocket->Send(Create<Packet> (200));
+        sendSocket->Send(Create<Packet> (20000));
     }
 }
 
 void TestFarmer(Ptr<Socket> socket) {
     NS_LOG_UNCOND("SENDING TO FARMER");
-    socket->Send(Create<Packet> (200));
+    socket->Send(Create<Packet> (20000));
 }
 
 void FarmerRxCallback(Ptr<Socket> socket) {
@@ -83,7 +83,6 @@ static void farmerSend(Ptr<Socket> socket[]) {
         NS_LOG_UNCOND("FARMER SEND");
         socket[i]->Send(Create<Packet> (2000));
     }
-
 }
 
 static void ManWalking(Ptr<ConstantPositionMobilityModel> cvMob, Ptr<Socket> socket[]) {
@@ -93,14 +92,22 @@ static void ManWalking(Ptr<ConstantPositionMobilityModel> cvMob, Ptr<Socket> soc
     Simulator::Schedule(Seconds(30.0), &farmerSend, socket);
     Simulator::Schedule(Seconds(35.0), &ManWalking, cvMob, socket);
 
-}
+}    
 
 int main(int argc, char *argv[]) {
+    
+    Gnuplot graf("graf.svg");
+    graf.SetTerminal("svg");
+    graf.SetTitle("Ahoj svet");
+    graf.SetLegend("Vzdialenost [m]","Priepustnost[Mbit/s]");
+    //graf.AppendExtra("set xrange[20:100]");
     std::string phyMode("DsssRate1Mbps");
+    Gnuplot2dDataset data;
+    data.SetTitle ("strata udajov");
+    data.SetStyle (Gnuplot2dDataset::LINES);
+    //data.SetErrorBars(Gnuplot2dDataset::Y);
 
     uint32_t numNodes = 25; // by default, 5x5
-
-
 
     // disable fragmentation for frames below 2200 bytes
     Config::SetDefault("ns3::WifiRemoteStationManager::FragmentationThreshold", StringValue("2200"));
@@ -207,7 +214,7 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer IpContainter = ipv4.Assign(devices);
     Ipv4InterfaceContainer fIpContainter = ipv4.Assign(fdevices);
 
-
+    
 
     TypeId tid = TypeId::LookupByName("ns3::UdpSocketFactory");
 
@@ -242,23 +249,23 @@ int main(int argc, char *argv[]) {
     }
     Simulator::Schedule(Seconds(30.0), &ManWalking, cvMob, farmerBcArr);
 
-
-//
-//    for (uint32_t i = 0; i < c.GetN(); i++) {
-//        Ptr<BasicEnergySource> basicSourcePtr = DynamicCast<BasicEnergySource> (sources.Get(i));
-//        basicSourcePtr->TraceConnectWithoutContext("RemainingEnergy", MakeCallback(&RemainingEnergy, i));
-//    }
-    
-    
-    // 8. Install FlowMonitor on all nodes
-    FlowMonitorHelper flowmon;  
-    Ptr<FlowMonitor> monitor = flowmon.InstallAll;
-
+   // for (uint32_t i = 0; i < c.GetN(); i++) {
+        Ptr<BasicEnergySource> basicSourcePtr = DynamicCast<BasicEnergySource> (sources.Get (1));
+  basicSourcePtr->TraceConnectWithoutContext ("RemainingEnergy", MakeBoundCallback (&RemainingEnergy,1,&data));
+        
+        
+    //}
 
     // Output what we are doing
     NS_LOG_UNCOND("Testing from node " << " with grid distance " << GRID_DISTANCE);
+    
+    
 
     Simulator::Stop(Seconds(180.0));
+
+
+   
+    
     AnimationInterface anim("wireless-animation.xml"); // Mandatory
     for (uint32_t i = 0; i < c.GetN(); ++i) {
         std::string str = "STA";
@@ -280,25 +287,25 @@ int main(int argc, char *argv[]) {
     anim.EnableIpv4RouteTracking("routingtable-wireless.xml", Seconds(0), Seconds(5), Seconds(0.25)); //Optional
     anim.EnableWifiMacCounters(Seconds(0), Seconds(10)); //Optional
     anim.EnableWifiPhyCounters(Seconds(0), Seconds(10)); //Optional
-
-
-
-
-    Simulator::Run();
     
-        // 8. Install FlowMonitor on all nodes
+    FlowMonitorHelper flowmon;
+    Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
+    Simulator::Run();
+    // 8. Install FlowMonitor on all nodes
+    
     monitor->CheckForLostPackets ();
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
     FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i){
         std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
-        std::cout << "  Tx Bytes:   " << i->second.rxPackets << "\n";
+        std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
     }
-
-
+    
     Simulator::Destroy();
-    
-    
-
+     graf.AddDataset (data);
+    std::ofstream plotFile("graf.plt");
+    graf.GenerateOutput (plotFile);
+    plotFile.close ();
+    if(system("gnuplot graf.plt"));
     return 0;
 }
