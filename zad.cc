@@ -21,11 +21,14 @@ NS_LOG_COMPONENT_DEFINE("WifiSimpleAdhocGrid");
 Gnuplot2dDataset data[25];
 /// Trace function for remaining energy at node.
 
+
+// zaznamenavanie zvysnej enegrie
 void RemainingEnergy(uint32_t i, double oldValue, double remainingEnergy) {
     double tm = Simulator::Now().GetSeconds();
     data[i].Add(tm, remainingEnergy);
 }
 
+// ratanie nahondej pozicie
 Vector randomManPosition(int x, int y, Vector m_position) {
     int r, s, edge;
     edge = rand() % 4;
@@ -56,6 +59,7 @@ Vector randomManPosition(int x, int y, Vector m_position) {
     return m_position;
 }
 
+// senzor odpoveda
 void SensorRxCallback(Ptr<Socket> sendSocket, Ptr<Socket> socket) {
     //    NS_LOG_UNCOND("Sensor received -> Sending");
     while (socket->Recv()) {
@@ -68,6 +72,7 @@ void SensorRxCallback(Ptr<Socket> sendSocket, Ptr<Socket> socket) {
 //    socket->Send(Create<Packet> (PACKET_SIZE));
 //}
 
+// data sa vratili
 void FarmerRxCallback(Ptr<Socket> socket) {
     while (socket->Recv()) {
         //        NS_LOG_UNCOND("FARMER RECEIVED");
@@ -75,6 +80,8 @@ void FarmerRxCallback(Ptr<Socket> socket) {
     }
 }
 
+// farmar posle unicast kazdemu senzorru
+// broadcast posielal len najblizsim susedom, oni to neposielalai dalej
 static void farmerSend(Ptr<Socket> socket[]) {
     for (int i = 0; i < 25; i++) {
         //        NS_LOG_UNCOND("FARMER SEND");
@@ -83,11 +90,14 @@ static void farmerSend(Ptr<Socket> socket[]) {
     std::cout << "\nBC\n";
 }
 
+
+// funkcia posunie farmara na nahodnu poziciu na okraji pola
 static void ManWalking(Ptr<ConstantPositionMobilityModel> cvMob, Ptr<Socket> socket[]) {
     Vector m_position = cvMob->GetPosition();
     cvMob->SetPosition(randomManPosition(4 * GRID_DISTANCE, 4 * GRID_DISTANCE, m_position));
-    //    NS_LOG_UNCOND("FARMER MOVED");
+    //pockame kym sa routy ustalia    
     Simulator::Schedule(Seconds(30.0), &farmerSend, socket);
+    // znova pohyb
     Simulator::Schedule(Seconds(35.0), &ManWalking, cvMob, socket);
 }
 
@@ -97,7 +107,7 @@ int main(int argc, char *argv[]) {
     graf.SetTerminal("svg");
     graf.SetTitle("Baterie");
     graf.SetLegend("Cas[s]", "Ostavajuca Energia v Baterii[J]");
-
+    
     for (int i = 0; i < 25; i++) {
         data[i].SetTitle("node " + std::to_string(i));
         data[i].SetStyle(Gnuplot2dDataset::LINES);
@@ -112,9 +122,11 @@ int main(int argc, char *argv[]) {
     Config::SetDefault("ns3::WifiRemoteStationManager::NonUnicastMode",
             StringValue(phyMode));
 
+    //senzory
     NodeContainer c;
     c.Create(numNodes);
 
+    //farmar
     NodeContainer f;
     f.Create(1);
 
@@ -143,6 +155,7 @@ int main(int argc, char *argv[]) {
     NetDeviceContainer devices = wifi.Install(wifiPhy, wifiMac, c);
     NetDeviceContainer fdevices = wifi.Install(wifiPhy, wifiMac, f);
 
+    //5X5 grid pre senzory
     MobilityHelper mobility;
     mobility.SetPositionAllocator("ns3::GridPositionAllocator",
             "MinX", DoubleValue(0.0),
@@ -156,6 +169,7 @@ int main(int argc, char *argv[]) {
 
     mobility.Install(c);
 
+    // pozicia farmara
     MobilityHelper fmobility;
     Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator>();
     positionAlloc->Add(Vector(0, 0, 0));
@@ -166,6 +180,7 @@ int main(int argc, char *argv[]) {
 
     Ptr<ConstantPositionMobilityModel> cvMob = f.Get(0)->GetObject<ConstantPositionMobilityModel>();
 
+   
     /** Energy Model **/
     BasicEnergySourceHelper basicSourceHelper;
     basicSourceHelper.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(250));
@@ -173,7 +188,8 @@ int main(int argc, char *argv[]) {
     WifiRadioEnergyModelHelper radioEnergyHelper;
     radioEnergyHelper.Set("TxCurrentA", DoubleValue(0.0174));
     DeviceEnergyModelContainer deviceModels = radioEnergyHelper.Install(devices, sources);
-
+    
+    
     // Enable OLSR
     OlsrHelper olsr;
     Ipv4StaticRoutingHelper staticRouting;
@@ -203,6 +219,8 @@ int main(int argc, char *argv[]) {
 
     TypeId tid = TypeId::LookupByName("ns3::UdpSocketFactory");
 
+    
+    //Farmer receive callback
     Ptr<Socket> farmerRx = Socket::CreateSocket(f.Get(0), tid);
     InetSocketAddress farmerRxIsoc = InetSocketAddress(Ipv4Address::GetAny(), 80);
     farmerRx->SetAllowBroadcast(true);
@@ -212,11 +230,13 @@ int main(int argc, char *argv[]) {
     Ptr<Socket> farmerBcArr[25];
 
     for (uint32_t i = 0; i < c.GetN(); i++) {
+        // Sensor receive
         Ptr<Socket> sensorRxSocket = Socket::CreateSocket(c.Get(i), tid);
         InetSocketAddress sensorRxIsoc = InetSocketAddress(Ipv4Address::GetAny(), 80);
         sensorRxSocket->SetAllowBroadcast(true);
         sensorRxSocket->Bind(sensorRxIsoc);
 
+        // Sensor transmit
         Ptr<Socket> sensorTxSocket = Socket::CreateSocket(c.Get(i), tid);
         InetSocketAddress sensorTxIsoc = InetSocketAddress(fIpContainter.GetAddress(0), 80);
         sensorTxSocket->SetAllowBroadcast(true);
@@ -224,12 +244,14 @@ int main(int argc, char *argv[]) {
 
         sensorRxSocket->SetRecvCallback(MakeBoundCallback(&SensorRxCallback, sensorTxSocket));
 
+        // farmer unicast 
         farmerBcArr[i] = Socket::CreateSocket(f.Get(0), tid);
         InetSocketAddress farmerBcIsoc = InetSocketAddress(IpContainter.GetAddress(i), 80);
         farmerBcArr[i]->Connect(farmerBcIsoc);
     }
     Simulator::Schedule(Seconds(30.0), &ManWalking, cvMob, farmerBcArr);
 
+    //power source status callback
     for (int i = 0; i < 25; i++) {
         Ptr<BasicEnergySource> basicSourcePtr = DynamicCast<BasicEnergySource>(sources.Get(i));
         basicSourcePtr->TraceConnectWithoutContext("RemainingEnergy", MakeBoundCallback(&RemainingEnergy, i));
