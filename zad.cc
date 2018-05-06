@@ -90,7 +90,7 @@ static void farmerSend(Ptr<Socket> socket[]) {
 static void ManWalking(Ptr<ConstantPositionMobilityModel> cvMob, Ptr<Socket> socket[]) {
     Vector m_position = cvMob->GetPosition();
     cvMob->SetPosition(randomManPosition(4 * GRID_DISTANCE, 4 * GRID_DISTANCE, m_position));
-//    NS_LOG_UNCOND("FARMER MOVED");
+    //    NS_LOG_UNCOND("FARMER MOVED");
     Simulator::Schedule(Seconds(30.0), &farmerSend, socket);
     Simulator::Schedule(Seconds(35.0), &ManWalking, cvMob, socket);
 
@@ -276,7 +276,7 @@ int main(int argc, char *argv[]) {
 
 
 
-    Simulator::Stop(Seconds(400.0));
+    Simulator::Stop(Seconds(300.0));
 
 
 
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
     int lostPackets = 0;
     int rxPackets = 0;
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin(); i != stats.end(); ++i) {
-        double usefulData = ((double) (i->second.rxBytes) / (double) (i->second.txBytes))*100;
+        //        double usefulData = ((double) (i->second.rxBytes) / (double) (i->second.txBytes))*100;
         //        double throughput = (double) i->second.rxBytes * 8.0 / (double) (i->second.timeLastRxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()) / 1024; //kbps
         double packetLossRate = ((double) i->second.lostPackets / (double) (i->second.lostPackets + i->second.rxPackets))*100;
         //        double meanDelay = (i->second.delaySum.GetMilliSeconds() / (double) i->second.rxPackets);
@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
 
     double avgLoss = ((double) lostPackets / (double) (lostPackets + rxPackets))*100;
 
-    std::cout << PACKET_SIZE << " - " << DISTANCE << " - " <<avgLoss;
+    std::cout << PACKET_SIZE << "B - " << GRID_DISTANCE << "M - " << avgLoss << "% loss\n";
 
     Simulator::Destroy();
 
