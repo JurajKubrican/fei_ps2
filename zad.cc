@@ -16,15 +16,16 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE("WifiSimpleAdhocGrid");
 
 #define GRID_DISTANCE 200
+#define PACKET_SIZE 200
 
 
 
-
+Gnuplot2dDataset data[25];
 /// Trace function for remaining energy at node.
 
-void RemainingEnergy(uint32_t i, Gnuplot2dDataset *data, double oldValue, double remainingEnergy) {
+void RemainingEnergy(uint32_t i, double oldValue, double remainingEnergy) {
     double tm = Simulator::Now().GetSeconds();
-    data->Add(tm, remainingEnergy);
+    data[i].Add(tm, remainingEnergy);
 }
 
 Vector randomManPosition(int x, int y, Vector m_position) {
@@ -58,20 +59,21 @@ Vector randomManPosition(int x, int y, Vector m_position) {
 }
 
 void SensorRxCallback(Ptr<Socket> sendSocket, Ptr<Socket> socket) {
-    NS_LOG_UNCOND("Sensor received -> Sending");
+    //    NS_LOG_UNCOND("Sensor received -> Sending");
     while (socket->Recv()) {
-        sendSocket->Send(Create<Packet> (200));
+        sendSocket->Send(Create<Packet> (PACKET_SIZE));
     }
 }
 
-void TestFarmer(Ptr<Socket> socket) {
-    NS_LOG_UNCOND("SENDING TO FARMER");
-    socket->Send(Create<Packet> (200));
-}
+//void TestFarmer(Ptr<Socket> socket) {
+//    NS_LOG_UNCOND("SENDING TO FARMER");
+//    socket->Send(Create<Packet> (PACKET_SIZE));
+//}
 
 void FarmerRxCallback(Ptr<Socket> socket) {
     while (socket->Recv()) {
-        NS_LOG_UNCOND("FARMER RECEIVED");
+        //        NS_LOG_UNCOND("FARMER RECEIVED");
+        std::cout << ".";
     }
 
 }
@@ -79,14 +81,16 @@ void FarmerRxCallback(Ptr<Socket> socket) {
 static void farmerSend(Ptr<Socket> socket[]) {
     for (int i = 0; i < 25; i++) {
         //        NS_LOG_UNCOND("FARMER SEND");
-        socket[i]->Send(Create<Packet> (2000));
+        socket[i]->Send(Create<Packet> (PACKET_SIZE));
     }
+    std::cout << "\nBC\n";
+
 }
 
 static void ManWalking(Ptr<ConstantPositionMobilityModel> cvMob, Ptr<Socket> socket[]) {
     Vector m_position = cvMob->GetPosition();
     cvMob->SetPosition(randomManPosition(4 * GRID_DISTANCE, 4 * GRID_DISTANCE, m_position));
-    NS_LOG_UNCOND("FARMER MOVED");
+//    NS_LOG_UNCOND("FARMER MOVED");
     Simulator::Schedule(Seconds(30.0), &farmerSend, socket);
     Simulator::Schedule(Seconds(35.0), &ManWalking, cvMob, socket);
 
@@ -100,9 +104,12 @@ int main(int argc, char *argv[]) {
     graf.SetLegend("Cas[s]", "Ostavajuca Energia v Baterii[J]");
 
 
-    Gnuplot2dDataset data;
-    data.SetTitle("");
-    data.SetStyle(Gnuplot2dDataset::LINES);
+
+    for (int i = 0; i < 25; i++) {
+        data[i].SetTitle("node " + std::to_string(i));
+        data[i].SetStyle(Gnuplot2dDataset::LINES);
+    }
+
 
 
 
@@ -258,8 +265,11 @@ int main(int argc, char *argv[]) {
     }
     Simulator::Schedule(Seconds(30.0), &ManWalking, cvMob, farmerBcArr);
 
-    Ptr<BasicEnergySource> basicSourcePtr = DynamicCast<BasicEnergySource> (sources.Get(12));
-    basicSourcePtr->TraceConnectWithoutContext("RemainingEnergy", MakeBoundCallback(&RemainingEnergy, 12, &data));
+    for (int i = 0; i < 25; i++) {
+        Ptr<BasicEnergySource> basicSourcePtr = DynamicCast<BasicEnergySource> (sources.Get(i));
+        basicSourcePtr->TraceConnectWithoutContext("RemainingEnergy", MakeBoundCallback(&RemainingEnergy, i));
+    }
+
 
     // Output what we are doing
     NS_LOG_UNCOND("Testing from node " << " with grid distance " << GRID_DISTANCE);
@@ -331,8 +341,10 @@ int main(int argc, char *argv[]) {
 
     Simulator::Destroy();
 
+    for (int i = 0; i < 25; i++) {
+        graf.AddDataset(data[i]);
 
-    graf.AddDataset(data);
+    }
     std::ofstream plotFile("graf.plt");
     graf.GenerateOutput(plotFile);
     plotFile.close();
